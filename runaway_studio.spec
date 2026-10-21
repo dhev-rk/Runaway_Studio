@@ -16,7 +16,7 @@
 import os
 
 block_cipher = None
-here = os.path.dirname(os.path.abspath(__file__))
+here = os.path.abspath(SPECPATH)
 
 datas = [
     ("runaway_studio_icon_256.png", "."),
