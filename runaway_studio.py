@@ -32,14 +32,15 @@ import tempfile
 import textwrap
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
-from PySide6.QtCore import (Qt, QProcess, QRect, QRectF, QSize, QThread, QTimer, QUrl, Signal)
+from PySide6.QtCore import (Qt, QEasingCurve, QPoint, QProcess, QPropertyAnimation, QRect,
+                            QRectF, QSize, QThread, QTimer, QUrl, Signal)
 from PySide6.QtGui import (QColor, QDesktopServices, QFont, QIcon, QImage, QKeySequence,
                            QPainter, QPen, QPixmap, QShortcut)
 from PySide6.QtMultimedia import QMediaPlayer
 from PySide6.QtMultimediaWidgets import QGraphicsVideoItem
 from PySide6.QtWidgets import (
-    QApplication, QButtonGroup, QCheckBox, QFileDialog, QFrame, QGraphicsScene,
-    QGraphicsView, QHBoxLayout, QLabel, QLineEdit, QMainWindow, QMessageBox,
+    QApplication, QButtonGroup, QCheckBox, QFileDialog, QFrame, QGraphicsDropShadowEffect,
+    QGraphicsScene, QGraphicsView, QHBoxLayout, QLabel, QLineEdit, QMainWindow, QMessageBox,
     QPlainTextEdit, QProgressBar, QPushButton, QScrollArea, QSizePolicy, QVBoxLayout,
     QWidget, QComboBox,
 )
@@ -888,6 +889,99 @@ def _card(title=None):
     return f, lay
 
 
+# ------------------------------------------------------------ about / help
+APP_VERSION = "1.0.0"
+AUTHOR_NAME = "Dhev Kannan"
+AUTHOR_LINKEDIN_URL = "https://www.linkedin.com/in/dhevathirajan/"
+AUTHOR_GITHUB_URL = "https://github.com/dhev-rk"
+SIBLING_PROJECT_LABEL = "Battery Data Visualizer"
+SIBLING_PROJECT_URL = "https://github.com/dhev-rk/battery-data-visualizer"
+CONTACT_EMAIL = "dhev.rk@gmail.com"
+
+ABOUT_BODY = (
+    "Built for battery safety testing — pulling a usable clip or still "
+    "frame out of long, heavy thermal-runaway and other abuse-test camera "
+    "recordings without needing a full video editor. Trims by seeking "
+    "straight to the span you want, can speed up a slow test to a "
+    "watchable length, resizes on export, burns in a timestamp or note, "
+    "and grabs single still frames.\n\n"
+    "Not limited to battery testing — works for any long recording you "
+    "just need a short, resized, labeled clip out of."
+)
+HELP_BODY = (
+    "Have a question, found something broken, or want to suggest a "
+    "feature? I'd like to hear about it."
+)
+
+
+def _rich_link(text, url, color=NAVY, size="12.5px"):
+    """A clickable hyperlink rendered as a QLabel (opens in the system
+    browser / default mail client for mailto: links)."""
+    lbl = QLabel(f'<a href="{url}" style="color:{color};">{text}</a>')
+    lbl.setOpenExternalLinks(True)
+    lbl.setStyleSheet(f"font-size:{size};border:none;")
+    lbl.setCursor(Qt.PointingHandCursor)
+    return lbl
+
+
+def _build_about_card():
+    card, lay = _card()
+    body = QLabel(ABOUT_BODY)
+    body.setWordWrap(True)
+    body.setStyleSheet(f"color:{TEXT};font-size:12px;border:none;")
+    lay.addWidget(body)
+    div = QFrame(); div.setFrameShape(QFrame.HLine); div.setStyleSheet(f"color:{BORDER};")
+    lay.addWidget(div)
+    ch = QLabel("CREATED BY")
+    ch.setStyleSheet(f"color:{SUB};font-size:10.5px;font-weight:700;border:none;")
+    lay.addWidget(ch)
+    name = QLabel(AUTHOR_NAME)
+    name.setStyleSheet(f"color:{TEXT};font-size:12.5px;font-weight:700;border:none;")
+    lay.addWidget(name)
+    links = QHBoxLayout(); links.setSpacing(14)
+    links.addWidget(_rich_link("LinkedIn", AUTHOR_LINKEDIN_URL))
+    links.addWidget(_rich_link("GitHub", AUTHOR_GITHUB_URL))
+    links.addStretch()
+    lay.addLayout(links)
+    also = QLabel(f'Also see: <a href="{SIBLING_PROJECT_URL}" style="color:{NAVY};">{SIBLING_PROJECT_LABEL}</a>')
+    also.setOpenExternalLinks(True)
+    also.setWordWrap(True)
+    also.setStyleSheet(f"color:{SUB};font-size:11px;border:none;")
+    lay.addWidget(also)
+    lic = QLabel(f"Version {APP_VERSION} · MIT License")
+    lic.setStyleSheet(f"color:{SUB};font-size:10.5px;border:none;")
+    lay.addWidget(lic)
+    lay.addStretch()
+    return card
+
+
+def _build_help_card():
+    card, lay = _card()
+    body = QLabel(HELP_BODY)
+    body.setWordWrap(True)
+    body.setStyleSheet(f"color:{TEXT};font-size:12px;border:none;")
+    lay.addWidget(body)
+    eh = QLabel("EMAIL")
+    eh.setStyleSheet(f"color:{SUB};font-size:10.5px;font-weight:700;border:none;margin-top:4px;")
+    lay.addWidget(eh)
+    er = QHBoxLayout(); er.setSpacing(8)
+    er.addWidget(_rich_link(CONTACT_EMAIL, f"mailto:{CONTACT_EMAIL}"))
+    copy_btn = QPushButton("Copy")
+    copy_btn.setStyleSheet(BTN)
+    copy_btn.setFixedWidth(55)
+    copy_btn.setCursor(Qt.PointingHandCursor)
+    copy_btn.clicked.connect(lambda: QApplication.clipboard().setText(CONTACT_EMAIL))
+    er.addWidget(copy_btn)
+    er.addStretch()
+    lay.addLayout(er)
+    gh = QLabel("GITHUB")
+    gh.setStyleSheet(f"color:{SUB};font-size:10.5px;font-weight:700;border:none;margin-top:4px;")
+    lay.addWidget(gh)
+    lay.addWidget(_rich_link(AUTHOR_GITHUB_URL, AUTHOR_GITHUB_URL))
+    lay.addStretch()
+    return card
+
+
 def _seg(options, default, parent_lay, on_change=None, max_width=310):
     """A row of mutually-exclusive toggle buttons (Resolution/Quality/Format
     etc). Packs buttons into one row at their own natural (readable) width
@@ -1042,6 +1136,25 @@ class VideoToolPage(QWidget):
         info_col.addWidget(self.folder_label)
         tb.addWidget(self.open_btn)
         tb.addLayout(info_col, 1)
+
+        # About / Help -- far right of the top bar, always visible. Each
+        # opens the slide-in info panel (built below, after the right-hand
+        # column exists) over the Clip/Export controls rather than a popup.
+        def _topbar_link(text):
+            lb = QLabel(f'<a href="#" style="color:#fff;text-decoration:none;">{text}</a>')
+            lb.setStyleSheet("font-size:12.5px;font-weight:700;border:none;")
+            lb.setCursor(Qt.PointingHandCursor)
+            return lb
+
+        self.about_link = _topbar_link("About")
+        self.help_link = _topbar_link("Help")
+        tb_sep = QLabel("|")
+        tb_sep.setStyleSheet("color:rgba(255,255,255,0.4);border:none;")
+        self.about_link.linkActivated.connect(lambda _: self._show_info("about"))
+        self.help_link.linkActivated.connect(lambda _: self._show_info("help"))
+        tb.addWidget(self.about_link)
+        tb.addWidget(tb_sep)
+        tb.addWidget(self.help_link)
         left.addWidget(topbar)
 
         card, cl = _card()
@@ -1222,6 +1335,7 @@ class VideoToolPage(QWidget):
 
         # ----- right: clip + export
         wrap = QWidget(); wrap.setFixedWidth(350)
+        self.right_wrap = wrap  # the About/Help overlay below covers exactly this column
         wrap_lay = QVBoxLayout(wrap)
         wrap_lay.setContentsMargins(0, 0, 0, 0)
         wrap_lay.setSpacing(12)
@@ -1474,6 +1588,8 @@ class VideoToolPage(QWidget):
         l3.addWidget(self.open_folder_btn)
         wrap_lay.addWidget(c3)
 
+        self._build_info_overlay()
+
         # ----- player (video only: no audio output is ever created)
         self.player = QMediaPlayer(self)
         self.player.setVideoOutput(self.video.item)
@@ -1496,6 +1612,132 @@ class VideoToolPage(QWidget):
         if not FFMPEG or not FFPROBE:
             self.status.setText("FFmpeg/ffprobe not found - install FFmpeg or place it "
                                 "next to this app. Needed for thumbnails and export.")
+
+    # ------------------------------------------------------ about / help
+    def _build_info_overlay(self):
+        """The About/Help panel: a plain child of this page, positioned to
+        exactly cover self.right_wrap (the Clip/Export column) so it slides
+        in ON TOP of those controls rather than replacing them in the
+        layout -- they're untouched underneath, just visually covered
+        while the panel is open."""
+        self.info_overlay = QFrame(self)
+        self.info_overlay.setStyleSheet(f"QFrame{{background:#fff;border-left:1px solid {BORDER};}}")
+        shadow = QGraphicsDropShadowEffect(self.info_overlay)
+        shadow.setBlurRadius(24)
+        shadow.setXOffset(-4)
+        shadow.setYOffset(0)
+        shadow.setColor(QColor(0, 0, 0, 70))
+        self.info_overlay.setGraphicsEffect(shadow)
+
+        lay = QVBoxLayout(self.info_overlay)
+        lay.setContentsMargins(16, 14, 16, 14)
+        lay.setSpacing(10)
+
+        head_row = QHBoxLayout()
+        self.info_title = QLabel("About Runaway Studio")
+        self.info_title.setStyleSheet(f"color:{TEXT};font-size:13px;font-weight:700;border:none;")
+        close_btn = QPushButton("✕")
+        close_btn.setFixedSize(26, 26)
+        close_btn.setCursor(Qt.PointingHandCursor)
+        close_btn.setToolTip("Close")
+        close_btn.setStyleSheet(
+            f"QPushButton{{background:transparent;color:{SUB};border:none;font-size:13px;}}"
+            f"QPushButton:hover{{color:{TEXT};}}")
+        close_btn.clicked.connect(self._close_info)
+        head_row.addWidget(self.info_title)
+        head_row.addStretch()
+        head_row.addWidget(close_btn)
+        lay.addLayout(head_row)
+
+        tabs_row = QHBoxLayout(); tabs_row.setSpacing(16)
+        self.info_about_tab = QLabel("ABOUT")
+        self.info_help_tab = QLabel("HELP")
+        for lb, which in ((self.info_about_tab, "about"), (self.info_help_tab, "help")):
+            lb.setCursor(Qt.PointingHandCursor)
+            lb.mousePressEvent = lambda _e, w=which: self._show_info(w)
+        tabs_row.addWidget(self.info_about_tab)
+        tabs_row.addWidget(self.info_help_tab)
+        tabs_row.addStretch()
+        lay.addLayout(tabs_row)
+
+        div = QFrame(); div.setFrameShape(QFrame.HLine); div.setStyleSheet(f"color:{BORDER};")
+        lay.addWidget(div)
+
+        self.about_card = _build_about_card()
+        self.help_card = _build_help_card()
+        self.help_card.hide()
+        lay.addWidget(self.about_card, 1)
+        lay.addWidget(self.help_card, 1)
+
+        self.info_overlay.hide()
+        self._info_anim = QPropertyAnimation(self.info_overlay, b"pos", self)
+        self._info_anim.setDuration(220)
+        self._info_anim.setEasingCurve(QEasingCurve.OutCubic)
+        self._position_info_overlay(visible=False)
+
+    def _style_info_tab(self, label, active):
+        if active:
+            label.setStyleSheet(
+                f"color:{NAVY};font-size:11px;font-weight:700;border:none;"
+                f"border-bottom:2px solid {NAVY};padding-bottom:5px;")
+        else:
+            label.setStyleSheet(
+                f"color:{SUB};font-size:11px;font-weight:700;border:none;padding-bottom:5px;")
+
+    def _position_info_overlay(self, visible):
+        """Keeps the overlay exactly over self.right_wrap -- called on
+        open and on resize, since its geometry is absolute, not managed
+        by a layout."""
+        top_left = self.right_wrap.mapTo(self, QPoint(0, 0))
+        w, h = self.right_wrap.width(), self.right_wrap.height()
+        shown_x = top_left.x()
+        hidden_x = top_left.x() + w  # just off the right edge
+        self.info_overlay.setGeometry(shown_x if visible else hidden_x, top_left.y(), w, h)
+
+    def _show_info(self, tab):
+        """Open the panel (sliding in from the right edge of the Clip/
+        Export column) to either the About or Help tab."""
+        first_open = not self.info_overlay.isVisible()
+        is_about = tab == "about"
+        self.about_card.setVisible(is_about)
+        self.help_card.setVisible(not is_about)
+        self.info_title.setText("About Runaway Studio" if is_about else "Help")
+        self._style_info_tab(self.info_about_tab, is_about)
+        self._style_info_tab(self.info_help_tab, not is_about)
+
+        top_left = self.right_wrap.mapTo(self, QPoint(0, 0))
+        w, h = self.right_wrap.width(), self.right_wrap.height()
+        shown_pos = QPoint(top_left.x(), top_left.y())
+        self.info_overlay.setGeometry(top_left.x() + (w if first_open else 0), top_left.y(), w, h)
+        self.info_overlay.show()
+        self.info_overlay.raise_()
+        self._info_anim.stop()
+        self._info_anim.setStartValue(self.info_overlay.pos())
+        self._info_anim.setEndValue(shown_pos)
+        self._info_anim.start()
+
+    def _close_info(self):
+        if not self.info_overlay.isVisible():
+            return
+        top_left = self.right_wrap.mapTo(self, QPoint(0, 0))
+        hidden_pos = QPoint(top_left.x() + self.right_wrap.width(), top_left.y())
+        self._info_anim.stop()
+        self._info_anim.setStartValue(self.info_overlay.pos())
+        self._info_anim.setEndValue(hidden_pos)
+        try:
+            self._info_anim.finished.disconnect()
+        except (RuntimeError, TypeError):
+            pass
+        self._info_anim.finished.connect(self.info_overlay.hide)
+        self._info_anim.start()
+
+    def resizeEvent(self, e):
+        super().resizeEvent(e)
+        # The overlay's geometry is absolute (it isn't managed by a
+        # layout), so it has to be re-synced to self.right_wrap's screen
+        # position by hand whenever this page is resized.
+        if hasattr(self, "info_overlay"):
+            self._position_info_overlay(visible=self.info_overlay.isVisible())
 
     # ---------------------------------------------------------- state
     def _set_enabled(self, on):
