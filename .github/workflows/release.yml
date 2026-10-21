@@ -12,6 +12,12 @@ on:
 jobs:
   build-windows:
     runs-on: windows-latest
+    # GitHub's auto-generated token for a workflow run defaults to
+    # read-only on repos created since late 2023, which builds the app
+    # fine but can't actually publish a Release without this. Scoped to
+    # just this job, just this one extra permission.
+    permissions:
+      contents: write
     steps:
       - name: Check out the repo
         uses: actions/checkout@v4
