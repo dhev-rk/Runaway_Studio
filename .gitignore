@@ -1,0 +1,25 @@
+# Build output
+build/
+dist/
+*.spec.bak
+__pycache__/
+*.pyc
+
+# FFmpeg binaries fetched by CI -- never committed, downloaded fresh on
+# every release build instead
+ffmpeg.exe
+ffprobe.exe
+ffmpeg.zip
+ffmpeg_extracted/
+
+# Editor/OS noise
+.DS_Store
+.vscode/
+*.swp
+
+# Local test scratch (videos, exported clips) -- never belongs in git
+test/
+*.mp4
+*.mkv
+*.mov
+*.avi
