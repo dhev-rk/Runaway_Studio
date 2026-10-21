@@ -52,6 +52,13 @@ TEXT = "#1a1d29"
 GREEN = "#10b981"
 RED = "#c0362c"
 
+# On Windows, a console-less GUI app (how this is packaged) still gets a
+# flashing console window for every child process it spawns unless told
+# not to -- and thumbnails spawn one short-lived ffmpeg process per frame,
+# so without this a video full of thumbnails flickers a terminal window
+# open-and-closed dozens of times. No-op on other platforms.
+_SUBPROCESS_FLAGS = subprocess.CREATE_NO_WINDOW if os.name == "nt" else 0
+
 
 def _base_dir():
     """Where bundled resources (ffmpeg.exe/ffprobe.exe, icons, fonts) live.
@@ -133,7 +140,8 @@ def probe(path):
     out = subprocess.run(
         [FFPROBE, "-v", "error", "-print_format", "json", "-show_format",
          "-show_streams", path],
-        capture_output=True, text=True, timeout=60)
+        capture_output=True, text=True, timeout=60,
+        creationflags=_SUBPROCESS_FLAGS)
     if out.returncode != 0:
         raise RuntimeError(out.stderr.strip() or "ffprobe failed")
     info = json.loads(out.stdout)
@@ -358,7 +366,8 @@ class ThumbWorker(QThread):
                 [FFMPEG, "-v", "error", "-ss", f"{t:.2f}", "-i", self.path,
                  "-frames:v", "1", "-vf", "scale=180:-2", "-f", "image2pipe",
                  "-vcodec", "png", "-"],
-                capture_output=True, timeout=60)
+                capture_output=True, timeout=60,
+                creationflags=_SUBPROCESS_FLAGS)
         except Exception:
             return i, None
         if self._stop or not r.stdout:
@@ -1796,7 +1805,8 @@ class VideoToolPage(QWidget):
             r = subprocess.run(
                 [FFMPEG, "-v", "error", "-ss", f"{self._pos:.3f}", "-i", self.video_path,
                  "-frames:v", "1", "-f", "image2pipe", "-vcodec", "png", "-"],
-                capture_output=True, timeout=30)
+                capture_output=True, timeout=30,
+                creationflags=_SUBPROCESS_FLAGS)
             img = QImage.fromData(r.stdout, "PNG") if r.stdout else QImage()
         except Exception as ex:
             self.status.setText(f"Capture failed: {ex}")
@@ -2360,6 +2370,12 @@ class VideoToolPage(QWidget):
         self._log_tail = []
         self._dst = dst
         self._proc = QProcess(self)
+        if os.name == "nt":
+            # Same reasoning as _SUBPROCESS_FLAGS above, but QProcess has
+            # no creationflags= of its own -- this is Qt's equivalent hook
+            # for it on Windows.
+            self._proc.setCreateProcessArgumentsModifier(
+                lambda args: setattr(args, "flags", args.flags | 0x08000000))  # CREATE_NO_WINDOW
         self._proc.setProcessChannelMode(QProcess.MergedChannels)
         self._proc.readyReadStandardOutput.connect(self._read_progress)
         self._proc.finished.connect(self._export_done)
